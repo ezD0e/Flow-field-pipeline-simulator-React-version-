@@ -1,0 +1,877 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>流体管网阻力模拟器 (离线版)</title>
+    <style>
+        :root {
+            --primary: #2563eb;
+            --primary-bg: #eff6ff;
+            --border: #e2e8f0;
+            --text-main: #1e293b;
+            --text-sub: #64748b;
+            --danger: #ef4444;
+            --warning: #f59e0b;
+        }
+        
+        * { box-sizing: border-box; }
+        
+        body {
+            margin: 0;
+            padding: 0;
+            font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+            display: flex;
+            height: 100vh;
+            overflow: hidden;
+            background-color: #f8fafc;
+            color: var(--text-main);
+        }
+
+        /* 左侧面板 */
+        .sidebar {
+            width: 320px;
+            background: white;
+            border-right: 1px solid var(--border);
+            display: flex;
+            flex-direction: column;
+            box-shadow: 4px 0 24px rgba(0,0,0,0.05);
+            z-index: 10;
+        }
+
+        .header {
+            padding: 16px;
+            border-bottom: 1px solid var(--border);
+        }
+        .header h1 {
+            font-size: 18px;
+            margin: 0;
+            color: var(--primary);
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .header p {
+            margin: 4px 0 0 0;
+            font-size: 12px;
+            color: var(--text-sub);
+        }
+
+        .scroll-content {
+            flex: 1;
+            overflow-y: auto;
+            padding: 16px;
+        }
+
+        .section { margin-bottom: 24px; }
+        .section-title {
+            font-size: 12px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            color: #94a3b8;
+            margin-bottom: 12px;
+        }
+
+        .control-group { margin-bottom: 12px; }
+        .control-group label {
+            display: block;
+            font-size: 12px;
+            color: var(--text-sub);
+            margin-bottom: 4px;
+        }
+        .input-row { display: flex; gap: 8px; }
+        
+        input[type="number"] {
+            width: 100%;
+            padding: 6px 8px;
+            border: 1px solid var(--border);
+            border-radius: 4px;
+            font-size: 13px;
+            outline: none;
+            transition: border-color 0.2s;
+        }
+        input[type="number"]:focus {
+            border-color: var(--primary);
+            box-shadow: 0 0 0 2px var(--primary-bg);
+        }
+
+        /* 按钮样式 */
+        .btn-group { display: flex; flex-direction: column; gap: 8px; }
+        .mode-btn {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 10px 12px;
+            border: 1px solid transparent;
+            background: #f1f5f9;
+            color: var(--text-main);
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 13px;
+            transition: all 0.2s;
+            text-align: left;
+        }
+        .mode-btn:hover { background: #e2e8f0; }
+        .mode-btn.active {
+            background: var(--primary);
+            color: white;
+            box-shadow: 0 2px 8px rgba(37, 99, 235, 0.2);
+        }
+        .mode-btn svg { width: 18px; height: 18px; }
+
+        .info-box {
+            background: var(--primary-bg);
+            border: 1px solid #dbeafe;
+            color: #1e40af;
+            padding: 12px;
+            border-radius: 6px;
+            font-size: 12px;
+            line-height: 1.5;
+            margin-top: 8px;
+        }
+
+        /* 属性卡片 */
+        .card {
+            background: white;
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            padding: 12px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+        }
+        .card-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 12px;
+            padding-bottom: 8px;
+            border-bottom: 1px solid var(--border);
+        }
+        .card-title { font-weight: bold; font-size: 12px; color: var(--text-sub); }
+        .icon-btn {
+            background: none;
+            border: none;
+            cursor: pointer;
+            padding: 4px;
+            border-radius: 4px;
+            color: var(--danger);
+        }
+        .icon-btn:hover { background: #fee2e2; }
+
+        .result-box {
+            background: #f8fafc;
+            border: 1px solid var(--border);
+            padding: 8px;
+            border-radius: 4px;
+            font-size: 12px;
+            display: flex;
+            justify-content: space-between;
+            margin-top: 8px;
+        }
+        .font-mono { font-family: monospace; }
+
+        /* 画布区域 */
+        .canvas-container {
+            flex: 1;
+            position: relative;
+            background-color: #f8fafc;
+            cursor: crosshair;
+        }
+        
+        svg { width: 100%; height: 100%; display: block; }
+        
+        .tooltip {
+            position: absolute;
+            background: #1e293b;
+            color: white;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 12px;
+            pointer-events: none;
+            transform: translate(-50%, -130%);
+            white-space: nowrap;
+            z-index: 100;
+            box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1);
+        }
+
+        .scale-indicator {
+            position: absolute;
+            top: 16px;
+            right: 16px;
+            background: rgba(255,255,255,0.9);
+            padding: 6px 12px;
+            border-radius: 4px;
+            font-size: 12px;
+            color: var(--text-sub);
+            border: 1px solid var(--border);
+            pointer-events: none;
+        }
+
+        /* 隐藏类 */
+        .hidden { display: none !important; }
+        
+        /* 简单的淡入动画 */
+        .fade-in { animation: fadeIn 0.3s ease-out; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateX(-5px); } to { opacity: 1; transform: translateX(0); } }
+
+    </style>
+</head>
+<body>
+
+    <!-- 左侧控制栏 -->
+    <div class="sidebar">
+        <div class="header">
+            <h1>
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.1a2 2 0 0 1-1-1.72v-.51a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"></path>
+                    <circle cx="12" cy="12" r="3"></circle>
+                </svg>
+                管网模拟器 (离线版)
+            </h1>
+            <p>2D 流体阻力计算与压力分布</p>
+        </div>
+
+        <div class="scroll-content">
+            <!-- 全局参数 -->
+            <div class="section">
+                <div class="section-title">全局参数</div>
+                <div class="control-group">
+                    <div class="input-row">
+                        <div style="flex:1">
+                            <label>管道高度 h (m)</label>
+                            <input type="number" id="inp-height" value="0.02" step="0.001" min="0.001">
+                        </div>
+                        <div style="flex:1">
+                            <label>流体粘度 η (Pa·s)</label>
+                            <input type="number" id="inp-viscosity" value="0.001" step="0.0001" min="0.000001">
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <hr style="border:0; border-top:1px solid #e2e8f0; margin-bottom:24px;">
+
+            <!-- 工具箱 -->
+            <div class="section">
+                <div class="section-title">模式选择</div>
+                <div class="btn-group">
+                    <button class="mode-btn" id="btn-draw" onclick="setMode('draw')">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+                        1. 绘制管道
+                    </button>
+                    <button class="mode-btn" id="btn-pressure" onclick="setMode('pressure')">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><path d="M12 6v6l4 2"></path></svg>
+                        2. 设置压力源
+                    </button>
+                    <button class="mode-btn" id="btn-select" onclick="setMode('select')">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3l7.07 16.97 2.51-7.39 7.39-2.51L3 3z"></path><path d="M13 13l6 6"></path></svg>
+                        3. 调整 / 删除
+                    </button>
+                </div>
+
+                <!-- 说明文字 -->
+                <div id="info-draw" class="info-box hidden">
+                    <strong>绘制模式：</strong><br>在右侧网格拖拽鼠标绘制直线。
+                    <div style="margin-top:8px; display:flex; align-items:center; gap:8px;">
+                        <span>默认宽(m):</span>
+                        <input type="number" id="inp-def-width" value="0.05" step="0.01" style="width:60px;">
+                    </div>
+                </div>
+                <div id="info-pressure" class="info-box hidden">
+                    <strong>压力模式：</strong><br>点击网格点，在下方输入该点的压力值 (Pa)。
+                </div>
+                <div id="info-select" class="info-box hidden">
+                    <strong>编辑模式：</strong><br>点击管道修改宽度，或点击压力点进行修改。
+                </div>
+            </div>
+
+            <!-- 属性面板 -->
+            <div class="section fade-in" id="panel-properties">
+                <div class="section-title" id="prop-title">当前选中</div>
+                
+                <!-- 管道属性 -->
+                <div id="prop-pipe" class="card hidden">
+                    <div class="card-header">
+                        <span class="card-title">管道参数</span>
+                        <button class="icon-btn" onclick="deleteSelected()" title="删除">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
+                        </button>
+                    </div>
+                    <div class="control-group">
+                        <div class="input-row">
+                            <div style="flex:1">
+                                <label>宽度 w (m)</label>
+                                <input type="number" id="sel-width" onchange="updatePipeWidth()">
+                            </div>
+                            <div style="flex:1">
+                                <label>长度 L (m)</label>
+                                <div id="sel-len" style="padding:6px; background:#f1f5f9; border-radius:4px; font-size:13px; color:#64748b;">-</div>
+                            </div>
+                        </div>
+                        <div class="result-box">
+                            <span style="color:#64748b">流阻 R:</span>
+                            <span class="font-mono" id="sel-res">-</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 节点属性 -->
+                <div id="prop-node" class="card hidden" style="border-color:#fde047; background:#fefce8;">
+                    <div class="card-header" style="border-color:#fef08a;">
+                        <span class="card-title" style="color:#854d0e;">端口压力</span>
+                        <button class="icon-btn" onclick="deleteSelected()" title="移除压力源">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
+                        </button>
+                    </div>
+                    <div class="control-group">
+                        <label style="color:#854d0e;">设定压力 P (Pa)</label>
+                        <input type="number" id="sel-pressure" onchange="updateNodePressure()" style="border-color:#fde047;">
+                        <div style="font-size:11px; color:#a16207; margin-top:6px;">输入数值设定恒压源。清空数值或点击垃圾桶移除。</div>
+                    </div>
+                </div>
+
+                <div id="prop-empty" class="section-title" style="text-align:center; padding:20px; font-weight:normal; font-style:italic;">未选中任何对象</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 画布 -->
+    <div class="canvas-container" id="canvas-container">
+        <div class="scale-indicator">Scale: 1 格 = 0.05 m</div>
+        <div id="tooltip" class="tooltip hidden">P = 0 Pa</div>
+        
+        <svg id="main-svg" preserveAspectRatio="xMidYMid slice">
+            <defs>
+                <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
+                    <path d="M 40 0 L 0 0 0 40" fill="none" stroke="#e2e8f0" stroke-width="1"/>
+                </pattern>
+            </defs>
+            <rect width="100%" height="100%" fill="url(#grid)" />
+            <g id="layer-pipes"></g>
+            <g id="layer-preview"></g>
+            <g id="layer-nodes"></g>
+            <g id="layer-cursor"></g>
+        </svg>
+    </div>
+
+<script>
+/**
+ * 核心逻辑 JS - 移植自 React 版本
+ */
+
+// --- 常量与状态 ---
+const GRID_SIZE = 40;
+const SCALE = 0.05;
+
+const state = {
+    pipes: [],          // {id, start:{x,y}, end:{x,y}, width}
+    userNodes: {},      // "x,y" -> pressure
+    nodePressures: {},  // 计算结果缓存
+    
+    globalHeight: 0.02,
+    viscosity: 0.001,
+    defaultWidth: 0.05,
+    
+    mode: 'draw',       // 'draw', 'pressure', 'select'
+    
+    selectedPipeId: null,
+    selectedNodeId: null,
+    
+    dragStart: null,    // {x,y}
+    currentMouse: null, // {x,y} 网格坐标
+    rawMouse: null,     // {x,y} 屏幕坐标 (用于 hover)
+};
+
+// --- DOM 引用 ---
+const ui = {
+    svg: document.getElementById('main-svg'),
+    layerPipes: document.getElementById('layer-pipes'),
+    layerNodes: document.getElementById('layer-nodes'),
+    layerPreview: document.getElementById('layer-preview'),
+    layerCursor: document.getElementById('layer-cursor'),
+    tooltip: document.getElementById('tooltip'),
+    
+    // 输入框
+    inpHeight: document.getElementById('inp-height'),
+    inpViscosity: document.getElementById('inp-viscosity'),
+    inpDefWidth: document.getElementById('inp-def-width'),
+    
+    // 属性面板
+    propPipe: document.getElementById('prop-pipe'),
+    propNode: document.getElementById('prop-node'),
+    propEmpty: document.getElementById('prop-empty'),
+    selWidth: document.getElementById('sel-width'),
+    selLen: document.getElementById('sel-len'),
+    selRes: document.getElementById('sel-res'),
+    selPressure: document.getElementById('sel-pressure'),
+    
+    // 按钮与信息
+    btns: {
+        draw: document.getElementById('btn-draw'),
+        pressure: document.getElementById('btn-pressure'),
+        select: document.getElementById('btn-select')
+    },
+    infos: {
+        draw: document.getElementById('info-draw'),
+        pressure: document.getElementById('info-pressure'),
+        select: document.getElementById('info-select')
+    }
+};
+
+// --- 初始化 ---
+function init() {
+    setMode('draw');
+    
+    // 绑定全局输入事件
+    ui.inpHeight.onchange = (e) => { state.globalHeight = parseFloat(e.target.value); solvePhysics(); updateSelectionUI(); };
+    ui.inpViscosity.onchange = (e) => { state.viscosity = parseFloat(e.target.value); solvePhysics(); updateSelectionUI(); };
+    ui.inpDefWidth.onchange = (e) => { state.defaultWidth = parseFloat(e.target.value); };
+
+    // 画布事件
+    const container = document.getElementById('canvas-container');
+    container.addEventListener('mousedown', handleMouseDown);
+    container.addEventListener('mousemove', handleMouseMove);
+    window.addEventListener('mouseup', handleMouseUp); // window 捕获以防拖出
+    
+    // 启动物理循环
+    solvePhysics();
+    render();
+}
+
+// --- 模式切换 ---
+window.setMode = function(mode) {
+    state.mode = mode;
+    state.selectedNodeId = null;
+    state.selectedPipeId = null;
+    
+    // 更新 UI 按钮状态
+    Object.values(ui.btns).forEach(b => b.classList.remove('active'));
+    Object.values(ui.infos).forEach(i => i.classList.add('hidden'));
+    
+    ui.btns[mode].classList.add('active');
+    ui.infos[mode].classList.remove('hidden');
+    
+    render();
+    updateSelectionUI();
+};
+
+// --- 交互逻辑 ---
+
+function getGridPoint(e) {
+    const pt = ui.svg.createSVGPoint();
+    pt.x = e.clientX;
+    pt.y = e.clientY;
+    const svgP = pt.matrixTransform(ui.svg.getScreenCTM().inverse());
+    return {
+        x: Math.round(svgP.x / GRID_SIZE) * GRID_SIZE,
+        y: Math.round(svgP.y / GRID_SIZE) * GRID_SIZE
+    };
+}
+
+function getRawPoint(e) {
+    const pt = ui.svg.createSVGPoint();
+    pt.x = e.clientX;
+    pt.y = e.clientY;
+    const svgP = pt.matrixTransform(ui.svg.getScreenCTM().inverse());
+    return { x: svgP.x, y: svgP.y };
+}
+
+function handleMouseDown(e) {
+    const gridPt = getGridPoint(e);
+    const gridKey = `${gridPt.x},${gridPt.y}`;
+    const rawPt = getRawPoint(e);
+    
+    if (state.mode === 'draw') {
+        state.dragStart = gridPt;
+        state.currentMouse = gridPt;
+    } 
+    else if (state.mode === 'pressure') {
+        // 只选点
+        state.selectedNodeId = gridKey;
+        state.selectedPipeId = null;
+    }
+    else if (state.mode === 'select') {
+        // 优先检查节点
+        const isNode = state.pipes.some(p => {
+            return (`${p.start.x},${p.start.y}` === gridKey) || (`${p.end.x},${p.end.y}` === gridKey);
+        });
+        
+        if (isNode) {
+            state.selectedNodeId = gridKey;
+            state.selectedPipeId = null;
+        } else {
+            // 检查管道点击
+            const clickedPipe = state.pipes.find(p => {
+                const minX = Math.min(p.start.x, p.end.x) - 5;
+                const maxX = Math.max(p.start.x, p.end.x) + 5;
+                const minY = Math.min(p.start.y, p.end.y) - 5;
+                const maxY = Math.max(p.start.y, p.end.y) + 5;
+                return rawPt.x >= minX && rawPt.x <= maxX && rawPt.y >= minY && rawPt.y <= maxY;
+            });
+            
+            if (clickedPipe) {
+                state.selectedPipeId = clickedPipe.id;
+                state.selectedNodeId = null;
+            } else {
+                state.selectedPipeId = null;
+                state.selectedNodeId = null;
+            }
+        }
+    }
+    
+    render();
+    updateSelectionUI();
+}
+
+function handleMouseMove(e) {
+    state.currentMouse = getGridPoint(e);
+    state.rawMouse = getRawPoint(e);
+    
+    // Hover 计算
+    updateTooltip(e.clientX, e.clientY);
+    
+    // 渲染游标和预览线
+    render();
+}
+
+function handleMouseUp(e) {
+    if (state.mode === 'draw' && state.dragStart) {
+        const start = state.dragStart;
+        const end = state.currentMouse;
+        
+        // 确保有长度
+        if (start.x !== end.x || start.y !== end.y) {
+            // 正交处理
+            const dx = Math.abs(end.x - start.x);
+            const dy = Math.abs(end.y - start.y);
+            const finalEnd = { ...end };
+            if (dx > dy) finalEnd.y = start.y;
+            else finalEnd.x = start.x;
+            
+            // 添加管道
+            state.pipes.push({
+                id: Math.random().toString(36).substr(2, 9),
+                start: { ...start },
+                end: finalEnd,
+                width: state.defaultWidth
+            });
+            
+            solvePhysics(); // 重新计算
+        }
+    }
+    state.dragStart = null;
+    render();
+}
+
+// --- 物理计算 ---
+
+function calculateResistance(len, width, height, eta) {
+    if (width <= 0 || height <= 0) return Infinity;
+    const term1 = 12 * eta * len;
+    let denom = 1 - 0.63 * (height / width);
+    if (denom <= 0.01) denom = 0.01;
+    const term2 = 1 / (Math.pow(height, 3) * width);
+    return (term1 / denom) * term2;
+}
+
+function solvePhysics() {
+    // 构建邻接表
+    const adj = {}; // nodeId -> [{target, R}]
+    const nodes = new Set();
+    
+    state.pipes.forEach(p => {
+        const u = `${p.start.x},${p.start.y}`;
+        const v = `${p.end.x},${p.end.y}`;
+        nodes.add(u); nodes.add(v);
+        
+        const dx = (p.end.x - p.start.x) / GRID_SIZE * SCALE;
+        const dy = (p.end.y - p.start.y) / GRID_SIZE * SCALE;
+        const L = Math.sqrt(dx*dx + dy*dy);
+        const R = calculateResistance(L, p.width, state.globalHeight, state.viscosity);
+        
+        if (!adj[u]) adj[u] = [];
+        if (!adj[v]) adj[v] = [];
+        adj[u].push({ t: v, R: R });
+        adj[v].push({ t: u, R: R });
+    });
+
+    // 迭代求解
+    let pressures = {};
+    const fixedKeys = Object.keys(state.userNodes);
+    
+    if (fixedKeys.length === 0) {
+        state.nodePressures = {}; // 无压力源
+        return;
+    }
+    
+    const avgP = fixedKeys.reduce((a, b) => a + state.userNodes[b], 0) / fixedKeys.length;
+    
+    // 初始化
+    nodes.forEach(n => {
+        pressures[n] = (n in state.userNodes) ? state.userNodes[n] : avgP;
+    });
+
+    // 迭代
+    for (let i = 0; i < 200; i++) {
+        let maxDiff = 0;
+        const nextP = { ...pressures };
+        
+        nodes.forEach(n => {
+            if (n in state.userNodes) return; // 固定点不计算
+            const neighbors = adj[n];
+            if (!neighbors) return;
+            
+            let sumG = 0;
+            let sumGP = 0;
+            neighbors.forEach(nb => {
+                const G = 1 / nb.R;
+                sumG += G;
+                sumGP += pressures[nb.t] * G;
+            });
+            
+            if (sumG > 0) {
+                const newVal = sumGP / sumG;
+                const diff = Math.abs(newVal - pressures[n]);
+                if (diff > maxDiff) maxDiff = diff;
+                nextP[n] = newVal;
+            }
+        });
+        
+        pressures = nextP;
+        if (maxDiff < 1e-5) break;
+    }
+    
+    state.nodePressures = pressures;
+}
+
+// --- 渲染逻辑 (DOM 操作) ---
+
+function render() {
+    // 1. 渲染管道
+    let pipesHtml = '';
+    const maxP = Math.max(...Object.values(state.nodePressures), 1);
+    
+    state.pipes.forEach(p => {
+        const isSel = p.id === state.selectedPipeId;
+        const u = `${p.start.x},${p.start.y}`;
+        const v = `${p.end.x},${p.end.y}`;
+        const p1 = state.nodePressures[u] || 0;
+        const p2 = state.nodePressures[v] || 0;
+        const avg = (p1 + p2) / 2;
+        const opacity = Math.min(1, Math.max(0.2, avg / maxP));
+        
+        const widthPx = Math.max(4, p.width * 200);
+        
+        // 实体管
+        pipesHtml += `<line x1="${p.start.x}" y1="${p.start.y}" x2="${p.end.x}" y2="${p.end.y}" 
+            stroke="rgba(37, 99, 235, ${opacity})" stroke-width="${widthPx}" />`;
+            
+        // 选中高亮
+        if (isSel) {
+            pipesHtml += `<line x1="${p.start.x}" y1="${p.start.y}" x2="${p.end.x}" y2="${p.end.y}" 
+                stroke="#f59e0b" stroke-width="${widthPx + 6}" stroke-opacity="0.5" />`;
+        }
+        
+        // 文字 (Hover显示由CSS控制太麻烦，这里简单处理：只显示选中的文字，或者全部不显示靠侧边栏)
+        // 为了性能，文字只在选中时显示在侧边栏，画布上保持清爽
+    });
+    ui.layerPipes.innerHTML = pipesHtml;
+
+    // 2. 渲染节点
+    let nodesHtml = '';
+    // 找出所有相关节点坐标
+    const nodeSet = new Set();
+    state.pipes.forEach(p => {
+        nodeSet.add(`${p.start.x},${p.start.y}`);
+        nodeSet.add(`${p.end.x},${p.end.y}`);
+    });
+    
+    nodeSet.forEach(key => {
+        const [x, y] = key.split(',').map(Number);
+        const isUser = key in state.userNodes;
+        const isSel = key === state.selectedNodeId;
+        const val = state.nodePressures[key];
+        
+        const r = isUser ? 8 : 5;
+        const fill = isUser ? "#f59e0b" : "#94a3b8";
+        const stroke = isSel ? "#000" : "white";
+        
+        nodesHtml += `<circle cx="${x}" cy="${y}" r="${r}" fill="${fill}" stroke="${stroke}" stroke-width="2" />`;
+        
+        if (isUser && val !== undefined) {
+            nodesHtml += `<text x="${x}" y="${y-12}" text-anchor="middle" font-size="10" font-weight="bold" fill="#b45309">${val}Pa</text>`;
+        }
+    });
+    ui.layerNodes.innerHTML = nodesHtml;
+
+    // 3. 渲染预览线
+    let previewHtml = '';
+    if (state.mode === 'draw' && state.dragStart && state.currentMouse) {
+        const s = state.dragStart;
+        const e = state.currentMouse;
+        let ex = e.x, ey = e.y;
+        if (Math.abs(ex - s.x) > Math.abs(ey - s.y)) ey = s.y;
+        else ex = s.x;
+        
+        previewHtml = `<line x1="${s.x}" y1="${s.y}" x2="${ex}" y2="${ey}" stroke="#3b82f6" stroke-width="4" stroke-dasharray="5,5" opacity="0.6" />`;
+    }
+    ui.layerPreview.innerHTML = previewHtml;
+
+    // 4. 渲染光标
+    let cursorHtml = '';
+    if ((state.mode === 'select' || state.mode === 'pressure') && state.currentMouse && !state.dragStart) {
+        const c = state.currentMouse;
+        const color = state.mode === 'pressure' ? '#f59e0b' : '#ef4444';
+        // 瞄准框
+        cursorHtml = `
+            <g transform="translate(${c.x}, ${c.y})">
+                <rect x="-10" y="-10" width="20" height="20" fill="none" stroke="${color}" stroke-width="1.5" stroke-dasharray="3,2" />
+                <line x1="-14" y1="0" x2="14" y2="0" stroke="${color}" stroke-width="0.5" opacity="0.5" />
+                <line x1="0" y1="-14" x2="0" y2="14" stroke="${color}" stroke-width="0.5" opacity="0.5" />
+            </g>
+        `;
+    }
+    // 选中节点框
+    if (state.selectedNodeId) {
+        const [sx, sy] = state.selectedNodeId.split(',').map(Number);
+        cursorHtml += `<rect x="${sx-12}" y="${sy-12}" width="24" height="24" fill="none" stroke="#f59e0b" stroke-width="2" />`;
+    }
+    ui.layerCursor.innerHTML = cursorHtml;
+}
+
+function updateTooltip(mx, my) {
+    // 仅在未拖拽且有数据时显示
+    if (state.dragStart || state.pipes.length === 0) {
+        ui.tooltip.classList.add('hidden');
+        return;
+    }
+    
+    // 查找 Hover 管道
+    const r = state.rawMouse;
+    let foundP = null;
+    
+    for (const p of state.pipes) {
+        const isHoriz = Math.abs(p.start.y - p.end.y) < 1;
+        let on = false;
+        let ratio = 0;
+        
+        if (isHoriz) {
+            if (Math.abs(r.y - p.start.y) < 8) {
+                const min = Math.min(p.start.x, p.end.x);
+                const max = Math.max(p.start.x, p.end.x);
+                if (r.x >= min && r.x <= max) {
+                    on = true;
+                    ratio = (max - min) === 0 ? 0 : (r.x - p.start.x)/(p.end.x - p.start.x);
+                }
+            }
+        } else {
+            if (Math.abs(r.x - p.start.x) < 8) {
+                const min = Math.min(p.start.y, p.end.y);
+                const max = Math.max(p.start.y, p.end.y);
+                if (r.y >= min && r.y <= max) {
+                    on = true;
+                    ratio = (max - min) === 0 ? 0 : (r.y - p.start.y)/(p.end.y - p.start.y);
+                }
+            }
+        }
+        
+        if (on) {
+            const u = `${p.start.x},${p.start.y}`;
+            const v = `${p.end.x},${p.end.y}`;
+            const p1 = state.nodePressures[u] || 0;
+            const p2 = state.nodePressures[v] || 0;
+            foundP = p1 + (p2 - p1) * ratio;
+            break;
+        }
+    }
+    
+    if (foundP !== null) {
+        ui.tooltip.textContent = `P = ${foundP.toFixed(2)} Pa`;
+        ui.tooltip.style.left = mx + 'px';
+        ui.tooltip.style.top = my + 'px';
+        ui.tooltip.classList.remove('hidden');
+    } else {
+        ui.tooltip.classList.add('hidden');
+    }
+}
+
+// --- 属性面板逻辑 ---
+
+window.updatePipeWidth = function() {
+    if (!state.selectedPipeId) return;
+    const val = parseFloat(ui.selWidth.value);
+    const p = state.pipes.find(i => i.id === state.selectedPipeId);
+    if (p && val > 0) {
+        p.width = val;
+        solvePhysics();
+        render();
+        updateSelectionUI(); // 刷新阻力显示
+    }
+};
+
+window.updateNodePressure = function() {
+    if (!state.selectedNodeId) return;
+    const valStr = ui.selPressure.value;
+    if (valStr === '') {
+        // 不做操作，允许清空等待输入
+        return;
+    }
+    const val = parseFloat(valStr);
+    if (!isNaN(val)) {
+        state.userNodes[state.selectedNodeId] = val;
+        solvePhysics();
+        render();
+    }
+};
+
+window.deleteSelected = function() {
+    if (state.selectedPipeId) {
+        state.pipes = state.pipes.filter(p => p.id !== state.selectedPipeId);
+        state.selectedPipeId = null;
+    }
+    if (state.selectedNodeId) {
+        delete state.userNodes[state.selectedNodeId];
+        // 注意：不取消选中，只变为普通节点
+        ui.selPressure.value = ''; 
+    }
+    solvePhysics();
+    render();
+    updateSelectionUI();
+};
+
+function updateSelectionUI() {
+    ui.propEmpty.classList.add('hidden');
+    ui.propPipe.classList.add('hidden');
+    ui.propNode.classList.add('hidden');
+    
+    if (state.selectedPipeId) {
+        const p = state.pipes.find(i => i.id === state.selectedPipeId);
+        if (p) {
+            ui.propPipe.classList.remove('hidden');
+            ui.selWidth.value = p.width;
+            
+            // 计算参数
+            const dx = (p.end.x - p.start.x) / GRID_SIZE * SCALE;
+            const dy = (p.end.y - p.start.y) / GRID_SIZE * SCALE;
+            const L = Math.sqrt(dx*dx + dy*dy);
+            const R = calculateResistance(L, p.width, state.globalHeight, state.viscosity);
+            
+            ui.selLen.textContent = L.toFixed(3);
+            ui.selRes.textContent = R.toExponential(2);
+        }
+    } else if (state.selectedNodeId) {
+        ui.propNode.classList.remove('hidden');
+        const val = state.userNodes[state.selectedNodeId];
+        ui.selPressure.value = val !== undefined ? val : '';
+        ui.selPressure.focus();
+    } else {
+        ui.propEmpty.classList.remove('hidden');
+    }
+}
+
+// 启动
+init();
+
+</script>
+</body>
+</html>
